@@ -1,0 +1,6 @@
+@MedDRA_Backhend_HostAddress = http://localhost:5242
+
+GET {{MedDRA_Backhend_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
