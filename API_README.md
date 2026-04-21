@@ -14,7 +14,7 @@
 
 ## 2. 服务概览
 
-当前 API 主要包含 4 类能力：
+当前 API 主要包含 5 类能力：
 
 1. 获取 MedDRA 版本列表
 2. 上传并解析待编码 Excel
@@ -50,17 +50,20 @@ http://localhost:5242
 
 `/api/encoding/run` 的内部策略是：
 
-1. 对待编码术语生成向量
-2. 去 Qdrant 对应版本 collection 中检索 Top N 候选
-3. 若高置信，则直接返回前 3 个候选
-4. 若非高置信，则调用 LLM 在 Top N 候选池中重排，选出 3 个候选
-5. 返回完整层级实体给前端
+1. 先用待编码术语按 `llt_name` 到 Qdrant 做 payload 精确匹配
+2. 再对待编码术语生成向量
+3. 去 Qdrant 对应版本 collection 中检索相似候选，当前默认 `SearchLimit = 15`
+4. 将 `LLT 精确匹配候选` 放在前面，再补充 `向量候选`，并按 `LLTCode` 去重
+5. 若高置信，则直接返回前 3 个候选
+6. 若非高置信，则调用 LLM 在合并后的候选池中重排，选出 3 个候选
+7. 返回完整层级实体给前端
 
 注意：
 
 - AI 不会直接生成新的 MedDRA 编码
-- AI 只会在 Qdrant 返回的候选池中做排序
+- AI 只会在后端候选池中做排序，候选池来自 `LLT 精确匹配 + Qdrant 向量检索`
 - 最终返回给前端的完整实体，来自后端对原始候选池的回查映射
+- `LLT 精确匹配` 使用 Qdrant `/points/scroll` + payload filter 实现，后端不需要缓存完整 MedDRA 字典
 
 ---
 
@@ -294,7 +297,7 @@ Content-Type: application/json
 | --- | --- | --- |
 | `rawTerm` | `string` | 原始待编码术语 |
 | `version` | `string` | 使用的 MedDRA 版本 |
-| `top1Score` | `number` | Top1 候选的向量检索分数 |
+| `top1Score` | `number` | Top1 候选分数；精确匹配候选当前为 `1.0`，向量候选为原始相似度分数 |
 | `usedAi` | `bool` | 是否调用了 LLM 重排 |
 | `remark` | `string` | 处理说明 |
 | `candidates` | `array` | 候选结果列表，通常取前 3 个 |
@@ -329,14 +332,22 @@ Content-Type: application/json
 详细流程：
 
 1. 接收前端提交的 `version + terms`
-2. 对每条术语生成 embedding
-3. 根据 `version` 映射到对应 collection 名
-4. 使用 Qdrant REST API 从对应 collection 检索 Top N
-5. 若 `Top1Score` 和 `Top1-Top2` 满足高置信规则，则直接取前 3 个
-6. 否则调用 LLM 重排
-7. LLM 只返回 `lltCode` 排名结果
-8. 后端根据 `lltCode` 从原始候选池中映射回完整实体
-9. 返回最终编码结果
+2. 根据 `version` 映射到对应 collection 名
+3. 使用 Qdrant `/points/scroll` 按 payload 条件 `llt_name = 待编码术语` 做 LLT 精确匹配
+4. 对每条术语生成 embedding
+5. 使用 Qdrant `/points/search` 从对应 collection 检索向量相似候选
+6. 将精确匹配候选放在前面，再补充向量候选，并按 `LLTCode` 去重
+7. 若 `Top1Score` 和 `Top1-Top2` 满足高置信规则，则直接取前 3 个
+8. 否则调用 LLM 重排
+9. LLM 只返回 `lltCode` 排名结果
+10. 后端根据 `lltCode` 从原始候选池中映射回完整实体
+11. 返回最终编码结果
+
+精确匹配补充规则：
+
+- 若同一个 `llt_name` 精确命中多条 LLT，后端会优先排列 `LLTCode = PTCode` 的标准条目。
+- 精确匹配候选的 `score` 当前设为 `1.0`，表示业务规则强命中，不是向量相似度原始分数。
+- 合并候选时，精确匹配结果优先，向量候选用于补充召回，重复 `LLTCode` 只保留第一次出现的候选。
 
 ### 6.8 高置信规则
 
@@ -364,7 +375,7 @@ Top1Score - Top2Score >= MinimumScoreGap
 
 不满足时：
 
-- 调用 AI 在 Top N 候选池中重排
+- 调用 AI 在合并后的候选池中重排
 
 ---
 
@@ -560,8 +571,8 @@ Content-Type: application/json
 | --- | --- |
 | `HighConfidenceThreshold` | 高置信阈值 |
 | `MinimumScoreGap` | Top1 与 Top2 的最小差值 |
-| `SearchLimit` | Qdrant 检索的候选数，默认建议 10 |
-| `OnlyCurrentTerms` | 是否只保留 `IsCurrent = true` 的术语 |
+| `SearchLimit` | Qdrant 向量检索候选数，当前建议 15 |
+| `OnlyCurrentTerms` | 是否只保留 `IsCurrent = true` 的术语；更推荐在建库时只导入 `IsCurrent = Y` |
 
 ---
 
@@ -621,7 +632,7 @@ Content-Type: application/json
 
 LLM 的职责是：
 
-- 在 Top N 候选池内排序
+- 在后端合并后的候选池内排序
 
 LLM 不负责：
 
@@ -637,6 +648,28 @@ LLM 不负责：
 - 降低 AI 幻觉风险
 - 保证返回字段可信
 - 方便前端直接展示 `LLT -> SOC`
+
+### 10.4 LLT 精确匹配优先
+
+当前后端在向量检索前，会先用 Qdrant payload 查询执行 LLT 名称精确匹配：
+
+```text
+llt_name == 待编码术语
+```
+
+这样可以避免类似 `发热` 这种标准 LLT 词面完全一致的术语，被通用 embedding 排到较低名次后无法进入候选池。
+
+实现位置：
+
+- [QdrantSearchService.cs](/Users/pa/Desktop/MedDRA/MedDRA_Backhend/Services/QdrantSearchService.cs)
+- [MedDraEncodingService.cs](/Users/pa/Desktop/MedDRA/MedDRA_Backhend/Services/MedDraEncodingService.cs)
+
+合并规则：
+
+- 精确匹配候选优先进入候选池
+- 向量检索候选随后补充
+- 使用 `LLTCode` 去重
+- 多个同名 LLT 中，优先排列 `LLTCode = PTCode` 的标准条目
 
 ---
 
@@ -673,6 +706,11 @@ LLM 不负责：
 
 因为后端会校验 AI 返回的 `lltCode` 是否存在于原始候选池中。  
 如果不存在，会回退到原始检索结果。
+
+### 12.4 为什么有些标准词不靠向量 Top N 也能命中？
+
+因为后端已经在向量检索前增加了 `LLT 名称精确匹配优先`。  
+例如待编码术语为 `发热` 时，即使 `发热 / 10037660` 在向量检索中没有排进 Top N，只要 Qdrant payload 中存在 `llt_name = 发热` 的当前有效术语，它也会先进入候选池。
 
 ---
 

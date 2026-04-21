@@ -8,6 +8,7 @@ using Microsoft.Extensions.Options;
 using OpenAI;
 using OpenAI.Chat;
 using System.ClientModel;
+using System.Diagnostics;
 
 namespace MedDRA_Backhend.Services;
 
@@ -49,7 +50,10 @@ public sealed class DashScopeAiRerankService : IAiRerankService
             //模型只输出LLTCode，后续会再做map
             chatResponse = await _chatClient.GetResponseAsync(
                 [
-                    new Microsoft.Extensions.AI.ChatMessage(ChatRole.System, "你是医学词典编码助手，需要对待编码字段选择合适的候选编码词条。请只从给定候选中选择最优、次优、较优 3 条，返回纯 JSON。注意：如果发现候选列表的匹配度很低，难以抉择，依旧选择最可能的前3条，严禁虚构不存在的编码"),
+                    new Microsoft.Extensions.AI.ChatMessage(ChatRole.System, "你是医学词典编码助手，需要对待编码字段选择合适的候选编码词条。请只从给定候选中选择最优、次优、较优 3 条，返回纯 JSON。" +
+                                                                             "注意：1. 如果发现候选列表的匹配度很低，难以抉择，依旧选择最可能的前3条，严禁虚构不存在的编码；" +
+                                                                             "2. 优先选择PT和待编码术语相同，或LLT和和待编码术语相同的结果；" +
+                                                                             "3. 如果存在多个PT-LLT相同的结果，优先选择PTcode和LLTcode一致的结果"),
                     new Microsoft.Extensions.AI.ChatMessage(ChatRole.User, prompt)
                 ],
                 cancellationToken: cancellationToken);
@@ -103,6 +107,7 @@ public sealed class DashScopeAiRerankService : IAiRerankService
 
         sb.AppendLine("请只返回如下 JSON：");
         sb.AppendLine("{\"candidates\":[{\"rank\":1,\"lltCode\":\"...\"},{\"rank\":2,\"lltCode\":\"...\"},{\"rank\":3,\"lltCode\":\"...\"}],\"reason\":\"...\"}");
+        Console.WriteLine(sb.ToString());
         return sb.ToString();
     }
 }

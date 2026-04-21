@@ -22,6 +22,7 @@ public sealed class MedDraEncodingService : IMedDraEncodingService
         _encodingOptions = encodingOptions.Value;
     }
 
+    // 后端编码主流程：接收前端提交的待编码词条列表；先生成查询向量，再从 Qdrant 召回候选，必要时调用 LLM 重排，最后返回候选编码结果。 
     public async Task<EncodingRunResponse> RunAsync(EncodingRunRequest request, CancellationToken cancellationToken)
     {
         if (request.Terms.Count == 0)
@@ -41,16 +42,29 @@ public sealed class MedDraEncodingService : IMedDraEncodingService
         {
             cancellationToken.ThrowIfCancellationRequested();
 
+            // Exact LLT match is checked first so standard MedDRA terms like "发热" are not lost by semantic retrieval.
+            var exactMatches = await _qdrantSearchService.ExactMatchByLltNameAsync(
+                request.Version,
+                term,
+                _encodingOptions.SearchLimit,
+                _encodingOptions.OnlyCurrentTerms,
+                cancellationToken);
+            Console.WriteLine($"[编码流程] 待编码术语='{term}'：LLT 名称精确匹配命中 {exactMatches.Count} 条，会优先放入候选列表。");
+
             //DashScopeEmbeddingService 具有实现文本向量化的函数
             var vector = await _embeddingService.GenerateAsync(term, cancellationToken);
             
-            //QdrantSearchService 具备通过相似度匹配返回最合适的前10个结果的函数
-            var searchResults = await _qdrantSearchService.SearchAsync(
+            // QdrantSearchService retrieves a wider semantic candidate pool; exact matches are merged ahead of it below.
+            var vectorSearchResults = await _qdrantSearchService.SearchAsync(
                 request.Version,
                 vector,
                 _encodingOptions.SearchLimit,
                 _encodingOptions.OnlyCurrentTerms,
                 cancellationToken);
+            Console.WriteLine($"[编码流程] 待编码术语='{term}'：向量相似度检索返回 {vectorSearchResults.Count} 条候选，配置的检索上限 SearchLimit={_encodingOptions.SearchLimit}。");
+
+            var searchResults = MergeCandidates(exactMatches, vectorSearchResults, _encodingOptions.SearchLimit);
+            Console.WriteLine($"[编码流程] 待编码术语='{term}'：合并规则为“精确匹配优先 + 向量候选补充 + 按 LLTCode 去重”，合并后进入后续判断/AI重排的候选数={searchResults.Count}。");
 
             if (searchResults.Count == 0)
             {
@@ -70,7 +84,7 @@ public sealed class MedDraEncodingService : IMedDraEncodingService
 
             if (usedAi)
             {
-                //DashScopeAiRerankService 具备LLM判断的函数（10个里面挑3个）
+                //DashScopeAiRerankService 具备LLM判断的函数（15个里面挑3个）
                 (finalCandidates, remark) = await RerankWithAiAsync(term, searchResults, cancellationToken);
             }
 
@@ -102,6 +116,40 @@ public sealed class MedDraEncodingService : IMedDraEncodingService
     {
         var (candidates, reason) = await _aiRerankService.RerankAsync(rawTerm, searchResults, cancellationToken);
         return (candidates.Take(3).ToArray(), reason);
+    }
+
+    private static IReadOnlyList<MedDraSearchCandidate> MergeCandidates(
+        IReadOnlyList<MedDraSearchCandidate> exactMatches,
+        IReadOnlyList<MedDraSearchCandidate> vectorSearchResults,
+        int limit)
+    {
+        var merged = new List<MedDraSearchCandidate>(exactMatches.Count + vectorSearchResults.Count);
+        var seenLltCodes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        // 合并顺序很重要：先放入 LLT 名称精确匹配结果，再补充向量相似度结果。
+        // 因为 exactMatches 排在前面，即使合并后的总数达到 limit，优先保留的也是精确匹配结果；
+        // 被截断的只会是排在后面的向量候选，用来避免候选池过长导致后续 AI prompt 过大。
+        foreach (var candidate in exactMatches.Concat(vectorSearchResults))
+        {
+            if (string.IsNullOrWhiteSpace(candidate.Term.LltCode))
+            {
+                continue;
+            }
+
+            // 同一个 LLTCode 可能既被精确匹配命中，又出现在向量检索结果中，这里只保留第一次出现的候选。
+            if (!seenLltCodes.Add(candidate.Term.LltCode))
+            {
+                continue;
+            }
+
+            merged.Add(candidate);
+            if (merged.Count >= limit)
+            {
+                break;
+            }
+        }
+
+        return merged;
     }
 
     private static bool ShouldUseAi(IReadOnlyList<MedDraSearchCandidate> candidates, float threshold, float minimumScoreGap)

@@ -4,6 +4,13 @@ namespace MedDRA_Backhend.Services.Abstractions;
 
 public interface IQdrantSearchService
 {
+    Task<IReadOnlyList<MedDraSearchCandidate>> ExactMatchByLltNameAsync(
+        string version,
+        string lltName,
+        int limit,
+        bool onlyCurrentTerms,
+        CancellationToken cancellationToken);
+
     Task<IReadOnlyList<MedDraSearchCandidate>> SearchAsync(
         string version,
         float[] vector,

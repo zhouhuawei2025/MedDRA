@@ -21,6 +21,70 @@ public sealed class QdrantSearchService : IQdrantSearchService
         _versionService = versionService;
     }
 
+    public async Task<IReadOnlyList<MedDraSearchCandidate>> ExactMatchByLltNameAsync(
+        string version,
+        string lltName,
+        int limit,
+        bool onlyCurrentTerms,
+        CancellationToken cancellationToken)
+    {
+        var collectionName = _versionService.ResolveCollectionName(version);
+        var request = new QdrantScrollRequest
+        {
+            Limit = limit,
+            WithPayload = true,
+            WithVector = false,
+            Filter = new QdrantFilter
+            {
+                Must =
+                [
+                    new QdrantFieldCondition
+                    {
+                        Key = "llt_name",
+                        Match = new QdrantMatch { Value = lltName }
+                    }
+                ]
+            }
+        };
+
+        if (onlyCurrentTerms)
+        {
+            request.Filter.Must.Add(new QdrantFieldCondition
+            {
+                Key = "is_current",
+                Match = new QdrantMatch { Value = true }
+            });
+        }
+
+        Console.WriteLine($"[Qdrant精确匹配] 开始按 payload 查询：条件 llt_name='{lltName}'，只查当前有效术语={onlyCurrentTerms}，最多返回={limit} 条。");
+        using var response = await _httpClient.PostAsJsonAsync(
+            $"/collections/{collectionName}/points/scroll",
+            request,
+            JsonOptions,
+            cancellationToken);
+
+        response.EnsureSuccessStatusCode();
+        var scrollResults = await response.Content.ReadFromJsonAsync<QdrantScrollResponse>(JsonOptions, cancellationToken)
+            ?? throw new InvalidOperationException("Qdrant 精确匹配未返回有效结果。");
+
+        var candidates = scrollResults.Result.Points
+            .Select(x => new MedDraSearchCandidate
+            {
+                Term = QdrantRestPayloadMapper.ToMedDraTerm(x.Payload),
+                // Exact payload match is a business rule, not a vector score. Use 1.0 so it stays first after merge.
+                Score = 1.0f
+            })
+            .Where(x => !onlyCurrentTerms || x.Term.IsCurrent)
+            // When several LLTs have the same display name, prefer the canonical row where LLTCode equals PTCode.
+            .OrderByDescending(x => string.Equals(x.Term.LltCode, x.Term.PtCode, StringComparison.OrdinalIgnoreCase))
+            .ThenBy(x => x.Term.LltCode, StringComparer.OrdinalIgnoreCase)
+            .Take(limit)
+            .ToArray();
+
+        Console.WriteLine($"[Qdrant精确匹配] 查询完成：llt_name='{lltName}' 精确命中 {candidates.Length} 条。若存在多条同名 LLT，会优先排列 LLTCode=PTCode 的标准条目。");
+        return candidates;
+    }
+
     public async Task<IReadOnlyList<MedDraSearchCandidate>> SearchAsync(
         string version,
         float[] vector,
