@@ -42,12 +42,17 @@ var openAiClient = new OpenAIClient(
 var embeddingClient = openAiClient.GetEmbeddingClient(embeddingOptions.Model);
 IEmbeddingGenerator<string, Embedding<float>> embeddingGenerator = embeddingClient.AsIEmbeddingGenerator();
 
-// 导入器已切到 REST，避免本机 gRPC/HTTP2 兼容问题影响初始化流程。
+// 已验证可用方案：使用 Qdrant REST API，避免 macOS 本地 gRPC/HTTP2 连接问题。
 using var qdrantHttpClient = new HttpClient
 {
     BaseAddress = new Uri(vectorStoreOptions.Endpoint)
 };
 var qdrantClient = new RestQdrantClient(qdrantHttpClient);
+
+// 实验方案：Qdrant.Client 官方 C# SDK 底层走 gRPC，在当前 macOS 环境会报 HTTP/2 连接错误。
+// using Qdrant.Client;
+// using Qdrant.Client.Grpc;
+// var qdrantClient = new QdrantClient("localhost", 6334);
 
 Console.WriteLine("正在获取向量维度...");
 var sampleEmbedding = await GenerateVectorAsync(embeddingGenerator, terms[0].SearchText);
@@ -55,6 +60,8 @@ var vectorSize = (ulong)sampleEmbedding.Length;
 Console.WriteLine($"向量维度:{vectorSize}");
 
 await EnsureCollectionAsync(qdrantClient, importOptions.CollectionName, vectorSize, importOptions.RecreateCollectionIfVectorSizeChanged);
+await qdrantClient.CreatePayloadIndexIfPossibleAsync(importOptions.CollectionName, "llt_name", "keyword");
+Console.WriteLine("Payload index 已创建或已确认：llt_name(keyword)");
 
 Console.WriteLine("开始生成向量并写入 Qdrant...");
 for (var index = 0; index < terms.Count; index += importOptions.BatchSize)
@@ -164,7 +171,7 @@ static string PromptForFilePath()
     }
 }
 
-//检查向量数据库的维度是否一致，以及collection是否已经存在
+// 检查向量数据库的维度是否一致，以及 collection 是否已经存在。
 static async Task EnsureCollectionAsync(RestQdrantClient qdrantClient, string collectionName, ulong vectorSize, bool recreateIfVectorSizeChanged)
 {
     var exists = await qdrantClient.CollectionExistsAsync(collectionName);

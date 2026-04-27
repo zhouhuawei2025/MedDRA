@@ -56,6 +56,26 @@ internal sealed class RestQdrantClient
         response.EnsureSuccessStatusCode();
     }
 
+    public async Task CreatePayloadIndexIfPossibleAsync(string collectionName, string fieldName, string fieldSchema)
+    {
+        using var response = await _httpClient.PutAsJsonAsync(
+            $"/collections/{collectionName}/index",
+            new
+            {
+                field_name = fieldName,
+                field_schema = fieldSchema
+            },
+            JsonOptions);
+
+        if (response.StatusCode is System.Net.HttpStatusCode.BadRequest or System.Net.HttpStatusCode.Conflict)
+        {
+            Console.WriteLine($"Payload index 可能已存在，继续执行：{fieldName}({fieldSchema})");
+            return;
+        }
+
+        response.EnsureSuccessStatusCode();
+    }
+
     public async Task UpsertAsync(string collectionName, IReadOnlyCollection<QdrantPoint> points)
     {
         using var response = await _httpClient.PutAsJsonAsync(

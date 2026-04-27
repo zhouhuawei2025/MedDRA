@@ -3,7 +3,8 @@ embedding模型可以返回文本对应的向量化结果，下面我们使用Qd
    https://qdrant.tech/documentation/quickstart/
    进入qdrant.tech或Docker中搜索Qdrant，根据提示下载Qdrant到Docker中运行。端口号为6333或6334
 2. 常用的方法
-   //1. 查询数据库是否存在collection
+
+  //1. 查询数据库是否存在collection
    bool collectionExists = await qdrantClient.CollectionExistsAsync(collectionName);
 
 //2. 查询collection的向量维度
