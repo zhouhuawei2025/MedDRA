@@ -24,9 +24,9 @@
 
 当前控制器如下：
 
-- [MeddraController.cs](/Users/pa/Desktop/MedDRA/MedDRA_Backhend/Controllers/MeddraController.cs)
-- [FilesController.cs](/Users/pa/Desktop/MedDRA/MedDRA_Backhend/Controllers/FilesController.cs)
-- [EncodingController.cs](/Users/pa/Desktop/MedDRA/MedDRA_Backhend/Controllers/EncodingController.cs)
+- [MeddraController.cs](/MedDRA_Backhend/Controllers/MeddraController.cs)
+- [FilesController.cs](/MedDRA_Backhend/Controllers/FilesController.cs)
+- [EncodingController.cs](/MedDRA_Backhend/Controllers/EncodingController.cs)
 
 ---
 
@@ -37,7 +37,7 @@
 本地开发时示例地址：
 
 ```text
-http://localhost:5242
+http://10.30.55.112:6333
 ```
 
 ### 3.2 数据格式
@@ -111,9 +111,9 @@ GET /api/meddra/versions
 
 调用链：
 
-1. [MeddraController.cs](/Users/pa/Desktop/MedDRA/MedDRA_Backhend/Controllers/MeddraController.cs)
-2. [MedDraVersionService.cs](/Users/pa/Desktop/MedDRA/MedDRA_Backhend/Services/MedDraVersionService.cs)
-3. 从 [appsettings.json](/Users/pa/Desktop/MedDRA/MedDRA_Backhend/appsettings.json) 的 `VectorStore.Collections` 读取版本映射
+1. [MeddraController.cs](/MedDRA_Backhend/Controllers/MeddraController.cs)
+2. [MedDraVersionService.cs](/MedDRA_Backhend/Services/MedDraVersionService.cs)
+3. 从 [appsettings.json](/MedDRA_Backhend/appsettings.json) 的 `VectorStore.Collections` 读取版本映射
 
 ---
 
@@ -146,7 +146,7 @@ Content-Type: multipart/form-data
 
 ### 5.4 Excel 格式约定
 
-第一版默认读取：
+默认读取：
 
 - 第一个 worksheet
 - 第一行作为表头
@@ -190,10 +190,10 @@ Content-Type: multipart/form-data
 
 调用链：
 
-1. [FilesController.cs](/Users/pa/Desktop/MedDRA/MedDRA_Backhend/Controllers/FilesController.cs)
-2. [EpplusExcelTermParser.cs](/Users/pa/Desktop/MedDRA/MedDRA_Backhend/Services/EpplusExcelTermParser.cs)
+1. [FilesController.cs](/MedDRA_Backhend/Controllers/FilesController.cs)
+2. [EpplusExcelTermParser.cs](/MedDRA_Backhend/Services/EpplusExcelTermParser.cs)
 3. 使用 `EPPlus` 解析 Excel
-4. 返回 [UploadPreviewResponse.cs](/Users/pa/Desktop/MedDRA/MedDRA_Backhend/Contracts/Files/UploadPreviewResponse.cs)
+4. 返回 [UploadPreviewResponse.cs](/MedDRA_Backhend/Contracts/Files/UploadPreviewResponse.cs)
 
 ---
 
@@ -323,11 +323,11 @@ Content-Type: application/json
 
 调用链：
 
-1. [EncodingController.cs](/Users/pa/Desktop/MedDRA/MedDRA_Backhend/Controllers/EncodingController.cs)
-2. [MedDraEncodingService.cs](/Users/pa/Desktop/MedDRA/MedDRA_Backhend/Services/MedDraEncodingService.cs)
-3. [DashScopeEmbeddingService.cs](/Users/pa/Desktop/MedDRA/MedDRA_Backhend/Services/DashScopeEmbeddingService.cs)
-4. [QdrantSearchService.cs](/Users/pa/Desktop/MedDRA/MedDRA_Backhend/Services/QdrantSearchService.cs)
-5. 若有需要，再进入 [DashScopeAiRerankService.cs](/Users/pa/Desktop/MedDRA/MedDRA_Backhend/Services/DashScopeAiRerankService.cs)
+1. [EncodingController.cs](/MedDRA_Backhend/Controllers/EncodingController.cs)
+2. [MedDraEncodingService.cs](/MedDRA_Backhend/Services/MedDraEncodingService.cs)
+3. [DashScopeEmbeddingService.cs](/MedDRA_Backhend/Services/DashScopeEmbeddingService.cs)
+4. [QdrantSearchService.cs](/MedDRA_Backhend/Services/QdrantSearchService.cs)
+5. 若有需要，再进入 [DashScopeAiRerankService.cs](/MedDRA_Backhend/Services/DashScopeAiRerankService.cs)
 
 详细流程：
 
@@ -358,7 +358,7 @@ Content-Type: application/json
 
 判断逻辑在：
 
-- [MedDraEncodingService.cs](/Users/pa/Desktop/MedDRA/MedDRA_Backhend/Services/MedDraEncodingService.cs)
+- [MedDraEncodingService.cs](/MedDRA_Backhend/Services/MedDraEncodingService.cs)
 
 规则为：
 
@@ -441,8 +441,8 @@ Content-Disposition: attachment; filename=meddra-coding-result-20260402123000.xl
 
 调用链：
 
-1. [FilesController.cs](/Users/pa/Desktop/MedDRA/MedDRA_Backhend/Controllers/FilesController.cs)
-2. [EpplusExcelExportService.cs](/Users/pa/Desktop/MedDRA/MedDRA_Backhend/Services/EpplusExcelExportService.cs)
+1. [FilesController.cs](/MedDRA_Backhend/Controllers/FilesController.cs)
+2. [EpplusExcelExportService.cs](/MedDRA_Backhend/Services/EpplusExcelExportService.cs)
 3. 使用 `EPPlus` 生成 Excel
 
 ---
@@ -520,9 +520,9 @@ Content-Type: application/json
 
 该接口不会新建第二套编码逻辑，而是直接复用批量编码接口的核心服务：
 
-1. [EncodingController.cs](/Users/pa/Desktop/MedDRA/MedDRA_Backhend/Controllers/EncodingController.cs)
+1. [EncodingController.cs](/MedDRA_Backhend/Controllers/EncodingController.cs)
 2. 将 `term` 包装成只有一个元素的 `terms` 列表
-3. 调用 [MedDraEncodingService.cs](/Users/pa/Desktop/MedDRA/MedDRA_Backhend/Services/MedDraEncodingService.cs)
+3. 调用 [MedDraEncodingService.cs](/MedDRA_Backhend/Services/MedDraEncodingService.cs)
 4. 从批量结果中取第一条返回给前端
 
 这样做的目的是保证：
@@ -537,7 +537,7 @@ Content-Type: application/json
 
 核心配置文件：
 
-- [appsettings.json](/Users/pa/Desktop/MedDRA/MedDRA_Backhend/appsettings.json)
+- [appsettings.json](/MedDRA_Backhend/appsettings.json)
 
 关键配置项：
 
@@ -584,8 +584,8 @@ Content-Type: application/json
 
 示例：
 
-- [EncodingRunRequest.cs](/Users/pa/Desktop/MedDRA/MedDRA_Backhend/Contracts/Encoding/EncodingRunRequest.cs)
-- [EncodingRunResponse.cs](/Users/pa/Desktop/MedDRA/MedDRA_Backhend/Contracts/Encoding/EncodingRunResponse.cs)
+- [EncodingRunRequest.cs](/MedDRA_Backhend/Contracts/Encoding/EncodingRunRequest.cs)
+- [EncodingRunResponse.cs](/MedDRA_Backhend/Contracts/Encoding/EncodingRunResponse.cs)
 
 ### 9.2 `Domain`
 
@@ -593,8 +593,8 @@ Content-Type: application/json
 
 示例：
 
-- [MedDraTerm.cs](/Users/pa/Desktop/MedDRA/MedDRA_Backhend/Domain/MedDraTerm.cs)
-- [MedDraSearchCandidate.cs](/Users/pa/Desktop/MedDRA/MedDRA_Backhend/Domain/MedDraSearchCandidate.cs)
+- [MedDraTerm.cs](/MedDRA_Backhend/Domain/MedDraTerm.cs)
+- [MedDraSearchCandidate.cs](/MedDRA_Backhend/Domain/MedDraSearchCandidate.cs)
 
 ### 9.3 `Services`
 
@@ -602,7 +602,7 @@ Content-Type: application/json
 
 示例：
 
-- [MedDraEncodingService.cs](/Users/pa/Desktop/MedDRA/MedDRA_Backhend/Services/MedDraEncodingService.cs)
+- [MedDraEncodingService.cs](/MedDRA_Backhend/Services/MedDraEncodingService.cs)
 
 ### 9.4 `Infrastructure`
 
@@ -661,8 +661,8 @@ llt_name == 待编码术语
 
 实现位置：
 
-- [QdrantSearchService.cs](/Users/pa/Desktop/MedDRA/MedDRA_Backhend/Services/QdrantSearchService.cs)
-- [MedDraEncodingService.cs](/Users/pa/Desktop/MedDRA/MedDRA_Backhend/Services/MedDraEncodingService.cs)
+- [QdrantSearchService.cs](/MedDRA_Backhend/Services/QdrantSearchService.cs)
+- [MedDraEncodingService.cs](/MedDRA_Backhend/Services/MedDraEncodingService.cs)
 
 合并规则：
 
@@ -716,13 +716,13 @@ llt_name == 待编码术语
 
 ## 14. 相关文件索引
 
-- [Program.cs](/Users/pa/Desktop/MedDRA/MedDRA_Backhend/Program.cs)
-- [appsettings.json](/Users/pa/Desktop/MedDRA/MedDRA_Backhend/appsettings.json)
-- [EncodingController.cs](/Users/pa/Desktop/MedDRA/MedDRA_Backhend/Controllers/EncodingController.cs)
-- [FilesController.cs](/Users/pa/Desktop/MedDRA/MedDRA_Backhend/Controllers/FilesController.cs)
-- [MeddraController.cs](/Users/pa/Desktop/MedDRA/MedDRA_Backhend/Controllers/MeddraController.cs)
-- [SingleEncodingRequest.cs](/Users/pa/Desktop/MedDRA/MedDRA_Backhend/Contracts/Encoding/SingleEncodingRequest.cs)
-- [MedDraEncodingService.cs](/Users/pa/Desktop/MedDRA/MedDRA_Backhend/Services/MedDraEncodingService.cs)
-- [DashScopeEmbeddingService.cs](/Users/pa/Desktop/MedDRA/MedDRA_Backhend/Services/DashScopeEmbeddingService.cs)
-- [DashScopeAiRerankService.cs](/Users/pa/Desktop/MedDRA/MedDRA_Backhend/Services/DashScopeAiRerankService.cs)
-- [QdrantSearchService.cs](/Users/pa/Desktop/MedDRA/MedDRA_Backhend/Services/QdrantSearchService.cs)
+- [Program.cs](/MedDRA_Backhend/Program.cs)
+- [appsettings.json](/MedDRA_Backhend/appsettings.json)
+- [EncodingController.cs](/MedDRA_Backhend/Controllers/EncodingController.cs)
+- [FilesController.cs](/MedDRA_Backhend/Controllers/FilesController.cs)
+- [MeddraController.cs](/MedDRA_Backhend/Controllers/MeddraController.cs)
+- [SingleEncodingRequest.cs](/MedDRA_Backhend/Contracts/Encoding/SingleEncodingRequest.cs)
+- [MedDraEncodingService.cs](/MedDRA_Backhend/Services/MedDraEncodingService.cs)
+- [DashScopeEmbeddingService.cs](/MedDRA_Backhend/Services/DashScopeEmbeddingService.cs)
+- [DashScopeAiRerankService.cs](/MedDRA_Backhend/Services/DashScopeAiRerankService.cs)
+- [QdrantSearchService.cs](/MedDRA_Backhend/Services/QdrantSearchService.cs)
